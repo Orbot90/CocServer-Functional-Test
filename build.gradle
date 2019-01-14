@@ -1,0 +1,85 @@
+import com.bmuschko.gradle.docker.DockerRemoteApiPlugin
+import com.bmuschko.gradle.docker.tasks.container.DockerCreateContainer
+import com.bmuschko.gradle.docker.tasks.container.DockerStartContainer
+import com.bmuschko.gradle.docker.tasks.container.DockerStopContainer
+import com.bmuschko.gradle.docker.tasks.image.DockerPullImage
+import com.bmuschko.gradle.docker.tasks.container.extras.DockerWaitHealthyContainer
+
+buildscript {
+    ext.serenity_version = '1.8.0'
+
+    repositories {
+        mavenCentral()
+    }
+    dependencies {
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:1.3.10"
+        classpath "net.serenity-bdd:serenity-gradle-plugin:$serenity_version"
+        classpath 'com.bmuschko:gradle-docker-plugin:3.2.3'
+    }
+}
+
+plugins {
+    id 'java'
+    id 'org.jetbrains.kotlin.jvm' version '1.3.10'
+}
+
+apply plugin: 'net.serenity-bdd.aggregator'
+apply plugin: DockerRemoteApiPlugin
+
+group 'orbot90'
+version '1.0-SNAPSHOT'
+
+sourceCompatibility = 1.8
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    compile "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
+    testCompile('junit:junit:4.12')
+    testCompile group: 'net.serenity-bdd', name: 'serenity-core', version: "$serenity_version"
+    testCompile group: 'net.serenity-bdd', name: 'serenity-junit', version: "$serenity_version"
+    testCompile group: 'net.serenity-bdd', name: 'serenity-rest-assured', version: "$serenity_version"
+    testCompile group: 'net.serenity-bdd', name: 'serenity-gradle-plugin', version: "$serenity_version"
+    testCompile('org.assertj:assertj-core:3.8.0')
+    testCompile('org.slf4j:slf4j-simple:1.7.25')
+    testCompile group: 'junit', name: 'junit', version: '4.12'
+}
+
+compileKotlin {
+    kotlinOptions.jvmTarget = "1.8"
+}
+compileTestKotlin {
+    kotlinOptions.jvmTarget = "1.8"
+}
+
+task pullImage(type: DockerPullImage) {
+    repository = 'orbot90/cocserver'
+}
+
+task createContainer(type: DockerCreateContainer) {
+    dependsOn pullImage
+    targetImageId { pullImage.getImageId() }
+    portBindings = ['8080:8080']
+}
+
+task startContainer(type: DockerStartContainer) {
+    dependsOn createContainer
+    targetContainerId { createContainer.getContainerId() }
+}
+
+task startAndWaitOnHealthyContainer(type: DockerWaitHealthyContainer) {
+    dependsOn startContainer
+    timeout = 60
+    targetContainerId { createContainer.getContainerId() }
+}
+
+task stopContainer(type: DockerStopContainer) {
+    targetContainerId { createContainer.getContainerId() }
+}
+
+test {
+    dependsOn startContainer
+    finalizedBy stopContainer
+}
